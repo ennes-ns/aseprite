@@ -1,11 +1,11 @@
-name: Build Aseprite (macOS Intel, 12+)
+name: Build Aseprite (macOS x86_64 Full)
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-macos-intel:
-    runs-on: macos-13  # Intel runner for x86_64 output
+  build:
+    runs-on: macos-latest
 
     steps:
       - name: Checkout
@@ -16,25 +16,22 @@ jobs:
       - name: Install tools
         run: |
           brew update
-          brew install cmake ninja pkg-config
+          brew install cmake ninja
 
-      - name: Download Skia (x64)
+      - name: Download Skia
         shell: bash
         run: |
           skia_url=$(source laf/misc/skia-url.sh | xargs)
           skia_file=$(basename "$skia_url")
-          echo "Downloading $skia_file"
           curl -L -o "$skia_file" "$skia_url"
           unzip -q "$skia_file" -d skia
-          ls -la skia/out || true
-          test -d skia/out/Release-x64
 
-      - name: Configure (x86_64, macOS 12)
+      - name: Configure (x86_64)
         shell: bash
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13 \
             -DCMAKE_OSX_ARCHITECTURES=x86_64 \
             -DLAF_BACKEND=skia \
             -DENABLE_SCRIPTING=ON \
@@ -46,18 +43,17 @@ jobs:
       - name: Build
         shell: bash
         run: |
-          cmake --build build --target aseprite --config RelWithDebInfo
+          cd build
+          ninja aseprite
 
-      - name: Stage runtime files
+      - name: Add runtime data
         shell: bash
         run: |
-          mkdir -p dist/aseprite-macos-x64
-          cp build/bin/aseprite dist/aseprite-macos-x64/
-          mkdir -p dist/aseprite-macos-x64/data
-          cp -R data/* dist/aseprite-macos-x64/data/
+          mkdir -p build/bin/data
+          cp -r data/* build/bin/data/
 
-      - name: Upload ready-to-run folder
+      - name: Upload macOS x86_64 package
         uses: actions/upload-artifact@v4
         with:
-          name: aseprite-macos-x64
-          path: dist/aseprite-macos-x64/
+          name: aseprite-macos-x86_64
+          path: build/bin/
