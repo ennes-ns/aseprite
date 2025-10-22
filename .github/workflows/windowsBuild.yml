@@ -1,4 +1,4 @@
-name: Build Aseprite (Windows Manual)
+name: Build Aseprite (Windows Full Package)
 
 on:
   workflow_dispatch:  # Manual trigger only
@@ -16,8 +16,8 @@ jobs:
       - name: Prepare MSVC build environment
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Install Ninja and CMake
-        run: choco install ninja cmake -y
+      - name: Install tools
+        run: choco install ninja cmake zip -y
 
       - name: Download Skia
         shell: bash
@@ -46,8 +46,20 @@ jobs:
           cd build
           ninja aseprite
 
-      - name: Upload compiled binary
+      - name: Copy runtime data
+        shell: bash
+        run: |
+          mkdir -p build/bin/data
+          cp -r data/* build/bin/data/
+
+      - name: Package build
+        shell: bash
+        run: |
+          cd build/bin
+          zip -r ../../aseprite-windows-full.zip .
+
+      - name: Upload full package
         uses: actions/upload-artifact@v4
         with:
-          name: aseprite-windows
-          path: build/bin/aseprite.exe
+          name: aseprite-windows-full
+          path: aseprite-windows-full.zip
