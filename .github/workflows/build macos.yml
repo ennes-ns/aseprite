@@ -1,0 +1,68 @@
+name: Build Aseprite (macOS Full Package)
+
+on:
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install tools
+        run: |
+          brew update
+          brew install ninja cmake curl unzip
+
+      - name: Download Skia (arm64)
+        shell: bash
+        run: |
+          skia_url=$(source laf/misc/skia-url.sh | xargs)
+          echo "SKIA URL: $skia_url"
+          skia_file=$(basename "$skia_url")
+          curl -L -o "$skia_file" "$skia_url"
+          unzip -q "$skia_file" -d skia
+
+      - name: Configure build
+        shell: bash
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.9 \
+            -DLAF_BACKEND=skia \
+            -DENABLE_SCRIPTING=ON \
+            -DENABLE_UPDATER=OFF \
+            -DENABLE_TELEMETRY=OFF \
+            -DSKIA_DIR=$(realpath skia) \
+            -DSKIA_LIBRARY_DIR=$(realpath skia/out/Release-arm64)
+
+      - name: Build Aseprite
+        shell: bash
+        run: |
+          cd build
+          ninja aseprite
+
+      - name: Bundle runtime data
+        shell: bash
+        run: |
+          # For CLI binary
+          mkdir -p build/bin/data
+          cp -r data/* build/bin/data/
+
+          # If an app bundle was produced, ensure Resources/data exists
+          if [ -d "build/bin/Aseprite.app" ]; then
+            mkdir -p "build/bin/Aseprite.app/Contents/Resources/data"
+            cp -r data/* "build/bin/Aseprite.app/Contents/Resources/data/"
+          fi
+
+      - name: Upload full build folder (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: aseprite-macos-full
+          path: build/bin/
+          if-no-files-found: error
