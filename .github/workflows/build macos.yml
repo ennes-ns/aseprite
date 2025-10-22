@@ -1,14 +1,14 @@
-name: Build Aseprite (macOS Full Package)
+name: Build Aseprite (macOS Intel, 12+)
 
 on:
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: macos-latest
+  build-macos-intel:
+    runs-on: macos-13  # Intel runner for x86_64 output
 
     steps:
-      - name: Checkout source
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -16,53 +16,48 @@ jobs:
       - name: Install tools
         run: |
           brew update
-          brew install ninja cmake curl unzip
+          brew install cmake ninja pkg-config
 
-      - name: Download Skia (arm64)
+      - name: Download Skia (x64)
         shell: bash
         run: |
           skia_url=$(source laf/misc/skia-url.sh | xargs)
-          echo "SKIA URL: $skia_url"
           skia_file=$(basename "$skia_url")
+          echo "Downloading $skia_file"
           curl -L -o "$skia_file" "$skia_url"
           unzip -q "$skia_file" -d skia
+          ls -la skia/out || true
+          test -d skia/out/Release-x64
 
-      - name: Configure build
+      - name: Configure (x86_64, macOS 12)
         shell: bash
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.9 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+            -DCMAKE_OSX_ARCHITECTURES=x86_64 \
             -DLAF_BACKEND=skia \
             -DENABLE_SCRIPTING=ON \
             -DENABLE_UPDATER=OFF \
             -DENABLE_TELEMETRY=OFF \
             -DSKIA_DIR=$(realpath skia) \
-            -DSKIA_LIBRARY_DIR=$(realpath skia/out/Release-arm64)
+            -DSKIA_LIBRARY_DIR=$(realpath skia/out/Release-x64)
 
-      - name: Build Aseprite
+      - name: Build
         shell: bash
         run: |
-          cd build
-          ninja aseprite
+          cmake --build build --target aseprite --config RelWithDebInfo
 
-      - name: Bundle runtime data
+      - name: Stage runtime files
         shell: bash
         run: |
-          # For CLI binary
-          mkdir -p build/bin/data
-          cp -r data/* build/bin/data/
+          mkdir -p dist/aseprite-macos-x64
+          cp build/bin/aseprite dist/aseprite-macos-x64/
+          mkdir -p dist/aseprite-macos-x64/data
+          cp -R data/* dist/aseprite-macos-x64/data/
 
-          # If an app bundle was produced, ensure Resources/data exists
-          if [ -d "build/bin/Aseprite.app" ]; then
-            mkdir -p "build/bin/Aseprite.app/Contents/Resources/data"
-            cp -r data/* "build/bin/Aseprite.app/Contents/Resources/data/"
-          fi
-
-      - name: Upload full build folder (artifact)
+      - name: Upload ready-to-run folder
         uses: actions/upload-artifact@v4
         with:
-          name: aseprite-macos-full
-          path: build/bin/
-          if-no-files-found: error
+          name: aseprite-macos-x64
+          path: dist/aseprite-macos-x64/
